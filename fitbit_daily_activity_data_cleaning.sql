@@ -1,95 +1,101 @@
 /*
-daily_activity_1 和 daily_activity_2 表分别对应了用户在2016年3月12号-4月11号， 和2016年 4月12号-5月12号的日常活动情况。
-两个表的列都相对应，并且数据类型相同，之后也许可以用 union all 将两个表合并。
+Daily activity data for users between March 12, 2016 - April 11, 2016 is stored in `daily_activity_1`, 
+and data from April 12, 2016 - May 12, 2016 is in `daily_activity_2`.
+Both tables have matching columns and data types, allowing them to be merged using UNION ALL if necessary.
 */
 
---查看两个table中的user_id 是否一致
+-- Step 1: Check if user_ids in both tables are consistent
 SELECT COUNT(DISTINCT Id)
-FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_1` -- 结果：35个user
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_1`; -- Result: 35 unique users
 
 SELECT COUNT(DISTINCT Id)
-FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_2` -- 结果： 33个user
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_2`; -- Result: 33 unique users
 
---为了保持调研样本的一致性和其活动的延续性，需要看看这些用户号的对应情况。
-
+-- Step 2: Examine the correspondence of user IDs between tables to ensure sample consistency
 SELECT DISTINCT(Daily_Activity_1.Id)
 FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_1` AS Daily_Activity_1
 LEFT JOIN 
 `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_2` AS Daily_Activity_2
 ON Daily_Activity_1.Id = Daily_Activity_2.Id 
-WHERE Daily_Activity_2.Id IS NULL --in the daily_activity_1 table there are 2 more user IDs, the rest are the same as that in the daily_activity_1 table, those 2 ids are : 2891001357 and 6391747486
+WHERE Daily_Activity_2.Id IS NULL;
+-- Result: There are 2 user IDs in `daily_activity_1` that are not present in `daily_activity_2` (IDs: 2891001357 and 6391747486).
 
---这两个用户将被剔除，不参与后续分析。
-
---新建一个daily_activity 的总表
-CREATE TABLE `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total` as 
+-- Step 3: Exclude these two users from further analysis for consistency
+-- Creating a combined table with only common users
+CREATE TABLE `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total` AS 
 SELECT *
-FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_1` as Daily_Activity_1 -- 3到4月数据
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_1` AS Daily_Activity_1 -- Data from March to April
 WHERE Daily_Activity_1.Id != 2891001357 AND Daily_Activity_1.Id != 6391747486
 UNION ALL
 SELECT *
-FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_2`as Daily_Activity_2;-- 4到5月数据
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_2` AS Daily_Activity_2; -- Data from April to May
 
+-- Step 4: Verify the combined table by checking ID and ActivityDate combinations
+SELECT Id, ActivityDate
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total`
+GROUP BY Id, ActivityDate
+ORDER BY Id, ActivityDate;
+-- Result: Total row count is 1380.
 
-select Id, ActivityDate
-from top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total -- 总行数 1380
-group by Id,ActivityDate
-order by Id,ActivityDate
-
---开始数据清洗
-
---查看是否这个总表有重要数据空缺的情况
-
+-- Step 5: Check for missing values in key columns in the combined table
 SELECT
-  COUNT(*) as total_rows,
-COUNTIF('Id' IS NULL) as missing_Id,
-COUNTIF('ActivityDate' IS NULL) as missing_ActivityDate,
-COUNTIF('TotalSteps' IS NULL) as missing_steps,
-COUNTIF('Calories' IS NULL) as missing_calories,
-COUNTIF('TotalDistance' IS NULL) as missing_distance,
-COUNTIF('VeryActiveMinutes' IS NULL) as missing_minutes,
-FROM top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total
+  COUNT(*) AS total_rows,
+  COUNTIF(Id IS NULL) AS missing_Id,
+  COUNTIF(ActivityDate IS NULL) AS missing_ActivityDate,
+  COUNTIF(TotalSteps IS NULL) AS missing_steps,
+  COUNTIF(Calories IS NULL) AS missing_calories,
+  COUNTIF(TotalDistance IS NULL) AS missing_distance,
+  COUNTIF(VeryActiveMinutes IS NULL) AS missing_minutes
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total`;
+-- Result: 1380 total rows, no missing values in key columns.
 
---总行数为1380，未发现有重要数据空缺的情况
-
---看看是否有outliers 
-select distinct id,
-       count(*) as num_activities
-FROM top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total
+-- Step 6: Identify outliers where SedentaryMinutes = 1440 (24 hours sedentary in a single day)
+SELECT DISTINCT Id,
+       COUNT(*) AS num_activities
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total`
 WHERE SedentaryMinutes = 1440 
-group by 1
-order by 2
--- 共有19名用户存在SedentaryMinutes = 1440，即记录中一天的静止时间为24小时的特殊情况，其中最少为1天，最多为24天。
+GROUP BY 1
+ORDER BY 2;
+-- Result: 19 users with SedentaryMinutes = 1440, ranging from 1 to 24 days.
 
-WITH total_prep as 
-( SELECT Id,
-       ActivityDate,
-       TotalSteps,
-       Calories,
-       TotalDistance,
-       VeryActiveMinutes,
-       count(*) over (partition by id order by ActivityDate) as num_activities
-FROM top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total
-WHERE SedentaryMinutes = 1440
-)
-/* 当SedentaryMinutes = 1440时， 一共有132条记录。 
-其中有用户其他重要指标都是0，可能存在login错误，或者默认设定等情况。
-1844505072，1927972279，2320127002等这些用户其他指标是0，但是卡路里那一栏总是呈相似指数，可能是由于其多次手动输入相关值。但是没有在其他运动时间使用设备。
-其他用户有一些记录是有其他指标的记录的，但是SedentaryMinutes = 1440，所以可能是手动输入其他指标，或者是设备记录存在故障
+-- Step 7: Further investigate records with SedentaryMinutes = 1440 for potential anomalies
+WITH total_prep AS 
+(
+  SELECT Id,
+         ActivityDate,
+         TotalSteps,
+         Calories,
+         TotalDistance,
+         VeryActiveMinutes,
+         COUNT(*) OVER (PARTITION BY Id ORDER BY ActivityDate) AS num_activities
+  FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total`
+  WHERE SedentaryMinutes = 1440
+);
+/*
+Analysis: When SedentaryMinutes = 1440, there are 132 records.
+Some users have other metrics set to 0, likely due to login errors or default settings.
+For example, users like 1844505072, 1927972279, and 2320127002 have consistent calorie values but no other recorded activities,
+likely due to manual entries or device malfunctions.
+Some users show metrics even when SedentaryMinutes is 1440, potentially due to manual inputs or recording errors.
 */
 
+-- Step 8: Identify records where Calories = 0, as other metrics (except SedentaryMinutes) are also 0.
+-- These cases (9 records) may be default settings or login errors, and should be filtered out in further analyses to avoid skewed averages.
+SELECT *
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total`
+WHERE Calories = 0;
 
---当卡路里为0时，其他指标除了 SedentaryMinutes 也都是0，这个情况有9条记录，可能是login 错位，或者是默认设置。为了之后对于指标平均值的计算，需要在之后过滤出其不为0的记录。
+-- Step 9: Examine other metrics when SedentaryMinutes = 1440, focusing on cases with recorded steps
+SELECT COUNT(*) AS num_cases_not_active, 
+       COUNT(CASE WHEN TotalSteps > 0 THEN TotalSteps ELSE NULL END) AS num_cases_not_active_with_steps
+FROM `top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total`
+WHERE SedentaryMinutes = 1440;
+/*
+Result: There are cases where Calories > 0 but other metrics are 0, likely due to users manually entering only calorie values.
+In 132 records with SedentaryMinutes = 1440, 17 records show recorded steps, possibly due to manual entry or device issues 
+where other activities were not recorded.
+*/
 
-SELECT *,
-FROM top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total
-WHERE  Calories = 0
-
---看看当SedentaryMinutes = 1440时，看看其他指标的状态
-SELECT COUNT(*) AS num_cases_not_active, COUNT(CASE WHEN TotalSteps >0 THEN TotalSteps ELSE NULL END) AS num_cases_not_active_with_steps
-FROM top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total
-WHERE SedentaryMinutes = 1440 
---因为有卡路里大于0，但是其他指标为0 的情况，很有可能时用户自己手动只输入了卡路里。 在SedentaryMinutes = 1440时，在132条记录中，有17条记录显示用户有记录步数，这很有可能时因为他们自己只手动输入了步数，或者是由于系统故障，其他的活动没有被记录到。
 
 
 ## User Count and Activity Distribution, this part is dedicated to data aggregation(TotalSteps,VeryActiveMinutes,SedentaryMinutes,Calories). 
@@ -116,8 +122,7 @@ WHERE SedentaryMinutes < 1440 and Calories != 0
 SELECT *
 FROM top-gantry-233512.FitBit_Fitness_Tracker_Data.Daily_Activity_Total
 WHERE TotalSteps = 0 AND SedentaryMinutes < 1440
---有11条记录显示SedentaryMinutes < 1440的情况下，TotalSteps 为0，可能是没有记录到，这些记录就不包括在以下的计算里了。
-
+--There are 11 records where TotalSteps is 0 while SedentaryMinutes is less than 1440, which may indicate that these steps were not recorded. Therefore, these records will not be included in the following calculations.
 
 SELECT 
   MIN(TotalSteps) AS min_steps,
