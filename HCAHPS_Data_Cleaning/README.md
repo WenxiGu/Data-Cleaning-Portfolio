@@ -1,4 +1,3 @@
-This folder contains HCAHPS data cleaning SQL files.
 
 # HCAHPS Data Cleaning Project
 
