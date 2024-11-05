@@ -1,36 +1,34 @@
---select * from "postgres"."Hospital_Data".hcahps_data
-CREATE TABLE "postgres"."Hospital_Data".Tableau_File as
-with hospital_beds_clean as
-(
-select 
-    lpad(provider_ccn::text,6,'0') as provider_ccn,
-	hospital_name,
-	to_date(fiscal_year_begin_date, 'MM/DD/YYYY') as fiscal_year_begin_date,
-	to_date(fiscal_year_end_date, 'MM/DD/YYYY') as fiscal_year_end_date,
-	number_of_beds,
-	row_number()over(partition by provider_ccn order by to_date(fiscal_year_end_date, 'MM/DD/YYYY')desc ) as nth_row
-	
-from "postgres"."Hospital_Data".hospital_beds
-)
---检查是否每个医院只对应一行
--- select provider_ccn, count(*) as num_rows
---   from hospital_beds_clean
---   where nth_row =1
---   group by provider_ccn
---   order by num_rows desc
- 
+-- HCAHPS Data Cleaning SQL Script
+-- This script performs data cleaning and standardization on the HCAHPS data.
 
-select 
-     lpad(facility_id::text,6,'0') as provider_ccn,
-     to_date(start_date, 'MM/DD/YYYY') as start_date_converted,
-	 to_date(end_date, 'MM/DD/YYYY') as end_date_converted,
-	 hcahps.*,
-	 beds.number_of_beds,
-	 beds.fiscal_year_begin_date as beds_start_report_period,
-	 fiscal_year_end_date as beds_end_report_period
-	 
-from "postgres"."Hospital_Data".hcahps_data as hcahps
-left join hospital_beds_clean as beds -- its a many to one join, rows should remain the same amount 
-  on lpad(facility_id::text,6,'0') = beds.provider_ccn
-  and beds.nth_row = 1
+-- Step 1: Create a temporary table 'hospital_beds_clean' with standardized provider_ccn and date formats
+CREATE TABLE "postgres"."Hospital_Data".Tableau_File as
+WITH hospital_beds_clean AS (
+    SELECT 
+        -- Standardize provider_ccn to ensure consistent 6-digit format
+        LPAD(provider_ccn::text, 6, '0') AS provider_ccn,
+        hospital_name,
+        -- Convert fiscal year start and end dates to standard date format
+        TO_DATE(fiscal_year_begin_date, 'MM/DD/YYYY') AS fiscal_year_begin_date,
+        TO_DATE(fiscal_year_end_date, 'MM/DD/YYYY') AS fiscal_year_end_date,
+        number_of_beds,
+        -- Rank rows to select the most recent entry per provider
+        ROW_NUMBER() OVER(PARTITION BY provider_ccn ORDER BY TO_DATE(fiscal_year_end_date, 'MM/DD/YYYY') DESC) AS nth_row
+    FROM "postgres"."Hospital_Data".hospital_beds
+)
+
+-- Step 2: Select only the latest record for each provider (where nth_row = 1)
+-- Join hospital beds data with HCAHPS data and standardize additional columns
+SELECT 
+    -- Standardize provider_ccn in HCAHPS data
+    LPAD(facility_id::text, 6, '0') AS provider_ccn,
+    TO_DATE(start_date, 'MM/DD/YYYY') AS start_date_converted,
+    TO_DATE(end_date, 'MM/DD/YYYY') AS end_date_converted,
+    hcahps.*,
+    beds.number_of_beds,
+    beds.fiscal_year_begin_date AS beds_start_report_period,
+    beds.fiscal_year_end_date AS beds_end_report_period
+FROM "postgres"."Hospital_Data".hcahps_data AS hcahps
+LEFT JOIN hospital_beds_clean AS beds ON hcahps.facility_id = beds.provider_ccn
+WHERE beds.nth_row = 1;
 
