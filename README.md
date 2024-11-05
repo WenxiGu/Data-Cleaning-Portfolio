@@ -22,7 +22,7 @@ Each project folder contains:
   - Standardized columns and dates
   - Removed duplicates
   - Merged tables for enriched analysis
-- **[Detailed Project README](link_to_project_1_folder/README.md)**
+- **[Detailed Project README](https://github.com/WenxiGu/Data-Cleaning-Portfolio/blob/main/HCAHPS_Data_Cleaning/README.md)**
 
 ---
 
@@ -34,7 +34,7 @@ Each project folder contains:
   - Formatted dates and standardized metrics
   - Removed duplicates and handled null values
   - Identified and managed outliers
-- **[Detailed Project README](link_to_project_2_folder/README.md)**
+- **[Detailed Project README](https://github.com/WenxiGu/Data-Cleaning-Portfolio/blob/main/Fitbit_Data_Cleaning/README.MD)**
 
 ## Skills Demonstrated
 
@@ -44,15 +44,3 @@ This portfolio demonstrates my skills in:
 - **Data Integration**: Merging multiple tables and data sources for comprehensive analysis.
 - **SQL Proficiency**: Writing complex SQL queries for data cleaning and manipulation.
 
-## Directory Structure
-
-```plaintext
-Data_Cleaning_Portfolio
-├── Project_1_HCAHPS
-│   ├── README.md
-│   ├── data_cleaning_HCAHPS.sql
-│   └── data_cleaning_HCAHPS_annotated.sql
-├── Project_2_Fitbit_Activity
-│   ├── README.md
-│   ├── fitbit_daily_activity_data_cleaning.sql
-│   ├── fitbit_sleep_data_cleaning.sql
